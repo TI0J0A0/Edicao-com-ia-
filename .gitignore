@@ -1,0 +1,13 @@
+# Backup só das ferramentas, guia de estilo e skills. Vídeos, brutos, caches e entregas NUNCA vão para o GitHub.
+/*
+!/.gitignore
+!/README.md
+!/skills-lock.json
+!/Scripts/
+!/Estilo/
+!/.claude/
+/.claude/*
+!/.claude/skills/
+__pycache__/
+*.pyc
+settings.local.json
