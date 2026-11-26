@@ -24,6 +24,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bordas import energia_voz  # noqa: E402
+import comum  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument("video")
@@ -65,22 +66,61 @@ if J.get("duracao_prevista") and abs(dv - J["duracao_prevista"]) > 1.0:
 
 # ---- preto, silêncio e loudness em uma passada só de áudio + uma de vídeo
 print("Procurando trechos pretos e travamentos…", flush=True)
-r = sh(["ffmpeg", "-hide_banner", "-i", a.video, "-vf",
-        "scale=320:-2,blackdetect=d=0.6:pix_th=0.08,freezedetect=n=0.002:d=0.25",
-        "-an", "-f", "null", "-"])
+# Travamento = JOGO parado E FACECAM parada ao mesmo tempo. Medidos separados numa passada só: a facecam é ~6%
+# da tela, então no quadro inteiro um menu parado com o João mexendo parecia "congelado" (falso positivo).
+CAM = J.get("facecam")
+W0, H0 = v["width"], v["height"]
+_QC = comum.projeto().get("qc", {})
+fz = f"freezedetect=n={_QC.get('ruido_congelado_jogo', 0.002)}:d={_QC.get('congelado_aviso_s', 0.25)}"
+fz_cam = f"freezedetect=n={_QC.get('ruido_congelado_cam', 0.0001)}:d={_QC.get('congelado_aviso_s', 0.25)}"
+
+
+def _meta(nome):
+    return (f"metadata=print:key=lavfi.freezedetect.freeze_start:file={nome}s.txt,"
+            f"metadata=print:key=lavfi.freezedetect.freeze_end:file={nome}e.txt")
+
+
+if CAM:
+    x, y, w, h = CAM
+    fc = (f"[0:v]split=2[g][c];[g]drawbox=x={x}:y={y}:w={w}:h={h}:color=black:t=fill,scale=320:-2,"
+          f"blackdetect=d=0.6:pix_th=0.08,{fz},{_meta('qcfz_g')}[go];"
+          f"[c]crop={w}:{h}:{x}:{y},format=gray,{fz_cam},{_meta('qcfz_c')}[co];[co]nullsink")
+else:
+    fc = f"[0:v]scale=320:-2,blackdetect=d=0.6:pix_th=0.08,{fz},{_meta('qcfz_g')}[go]"
+r = subprocess.run(["ffmpeg", "-hide_banner", "-i", os.path.abspath(a.video), "-filter_complex", fc, "-map", "[go]",
+                    "-an", "-f", "null", "-"], capture_output=True, text=True, encoding="utf-8", errors="ignore",
+                   cwd=pasta or ".")
+if r.returncode != 0:      # checagem que não roda NÃO pode parecer aprovada
+    problemas.append("a checagem de pretos/travamentos não rodou: " + r.stderr.strip()[-200:])
 pretos = [(float(x), float(y)) for x, y in re.findall(r"black_start:([\d.]+) black_end:([\d.]+)", r.stderr)]
 fim_util = dv - float(J.get("duracao_encerramento") or 0) - 0.6   # tela final é parada/muda de propósito
-ini_fr = [float(x) for x in re.findall(r"freeze_start: ([\d.]+)", r.stderr)]
-fim_fr = [float(x) for x in re.findall(r"freeze_end: ([\d.]+)", r.stderr)]
+
+
+def _spans(nome):
+    def ler(suf):
+        arq = os.path.join(pasta or ".", f"{nome}{suf}.txt")
+        if not os.path.exists(arq):
+            return []
+        vals = [float(l.split("=")[1]) for l in open(arq, encoding="utf-8") if "freezedetect.freeze_" in l]
+        os.remove(arq)
+        return vals
+    ini, fim = ler("s"), ler("e")
+    return [(x, fim[k] if k < len(fim) else dv) for k, x in enumerate(ini)]
+
+
+fr_jogo, fr_cam = _spans("qcfz_g"), _spans("qcfz_c")
+if CAM:   # interseção: só conta quando os dois param juntos
+    fr = [(max(x, x2), min(y, y2)) for x, y in fr_jogo for x2, y2 in fr_cam if min(y, y2) - max(x, x2) >= 0.25]
+else:
+    fr = fr_jogo
 travamentos = []
-for k, x in enumerate(ini_fr):
-    y = fim_fr[k] if k < len(fim_fr) else dv
+for x, y in fr:
     if x >= fim_util or any(px <= x <= py for px, py in pretos):   # tela final / tela preta já avisada
         continue
     travamentos.append((round(x, 2), round(y, 2)))
     (problemas if y - x >= 1.0 else avisos).append(
-        f"TRAVAMENTO {x:.2f}s–{y:.2f}s ({y - x:.2f}s): quadro inteiro parado (jogo + facecam) — "
-        "lag da live ou render; cortar/cobrir ou re-renderizar")
+        f"TRAVAMENTO {x:.2f}s–{y:.2f}s ({y - x:.2f}s): {'jogo e facecam parados juntos' if CAM else 'quadro inteiro parado (facecam desconhecida)'}"
+        " — lag da live ou render; cortar/cobrir ou re-renderizar")
 for x, y in pretos:
     if x > dv - 4:      # o cartão final pode escurecer
         continue
@@ -146,7 +186,8 @@ def voz_no_corte(t, nome):
 
 
 for j in J["juncoes"]:
-    m = voz_no_corte(j["t"], f"na emenda do trecho {j['trecho']} ({j['capitulo']})")
+    m = voz_no_corte(j["t"] + float(j.get("audio_desloc", 0) or 0),   # J/L: a fronteira do som anda
+                     f"na emenda do trecho {j['trecho']} ({j['capitulo']})")
     if m:
         avisos.append(m)
 m = voz_no_corte(fim_util + 0.6, "no FIM do episódio")

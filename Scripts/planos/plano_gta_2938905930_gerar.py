@@ -144,7 +144,7 @@ for ep in EPISODIOS:
         if segs and (ia - segs[-1]["origem_fim"] > FOLGA_DISSOLVE or forcar == ["dissolve"]):
             tr = "dissolve"
         segs.append({"capitulo": cap, "origem_inicio": ia, "origem_fim": ib, "decisao": dec, "motivo": mot,
-                     "transicao": tr})
+                     "transicao": tr, "transicao_forcada": forcar == ["dissolve"]})
     pos, caps = 0.0, []
     for s in segs:
         s["editado_inicio"] = round(pos, 2)
@@ -167,7 +167,10 @@ for ep in EPISODIOS:
 plano = {
     "video": "Bruto/live_2938905930_1080p60.mp4", "jogo": JOGO,
     "vod": "https://www.twitch.tv/videos/2938905930", "transcricao": TR,
-    "estilo": "Estilo/ESTILO - video longo - Claude Code v2.md (v3)",
+    "estilo": "Estilo/ESTILO - video longo V4.md",
+    # V4: fontes usadas por transicoes.py / validar_plano.py / revisor_editorial.py
+    "audio": AUDIO, "analise": "Trabalho/longo_gta_2938905930/analise.json",
+    "narrativa": "Trabalho/longo_gta_2938905930/narrativa.json", "perfil": ["mundo_aberto", "narrativo"],
     "status": STATUS, "aprovado_em": "2026-11-24 (João: \"Aprovado\")",
     "formato": "16:9 1920x1080 60 fps (igual à fonte)",
     "encerramento": {"arquivo": "Estilo/encerramento_gta6.png", "duracao": 10.0},

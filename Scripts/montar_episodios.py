@@ -34,7 +34,19 @@ O áudio de cada episódio é montado numa trilha única com acrossfade em todas
 normalizado (-14 LUFS); o vídeo é montado em pedaços com duração em quadros exatos e unido sem
 recodificar, então áudio e vídeo terminam juntos.
 
+V4 (2026-11-26):
+- FPS EXATO da fonte (racional, ex. 60000/1001) — antes arredondava 59,94 para 60 e duplicava 1 quadro a cada
+  ~17 s (micro-travada no vídeo final).
+- J/L-cut: "audio_desloc" no trecho (s; >0 = L-cut, o som do trecho anterior continua sobre a imagem nova;
+  <0 = J-cut, o som do trecho entra antes da imagem). Escolhido por Scripts/transicoes.py.
+- Só renderiza plano VALIDADO (Scripts/validar_plano.py) com a montagem atual; --sem-validacao para exceções.
+- --previa-emendas: prévia leve (640x360, ±3 s) de cada emenda em <pasta>/parte_NN/previas/ para conferir
+  antes do render definitivo.
+- Decodificação na GPU só se config/projeto.json -> render.hwaccel_decode estiver preenchido (benchmark).
+- Cache por pedaço (tempo exato): corrigir um trecho e renderizar de novo só recodifica o que mudou.
+
 Uso: python Scripts/montar_episodios.py --plano Trabalho/plano_x.json [--parte 1] [--so N] [--pasta Trabalho/ep_cache]
+        [--previa-emendas] [--sem-validacao]
 """
 import argparse
 import json
@@ -45,6 +57,9 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import comum  # noqa: E402
+
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(RAIZ)
 ap = argparse.ArgumentParser()
@@ -53,11 +68,17 @@ ap.add_argument("--parte", type=int, default=0, help="renderiza só esta parte (
 ap.add_argument("--so", type=int, default=0, help="só os N primeiros trechos (teste rápido)")
 ap.add_argument("--pasta", default=None)
 ap.add_argument("--ignorar-status", action="store_true", help="permite renderizar prévias sem aprovação")
+ap.add_argument("--previa-emendas", action="store_true", help="só prévias leves (640x360, ±3 s) de cada emenda")
+ap.add_argument("--sem-validacao", action="store_true", help="renderiza mesmo sem validar_plano.py (exceção)")
 args = ap.parse_args()
 
 plano = json.load(open(args.plano, encoding="utf-8"))
-if plano.get("status") != "aprovado" and not args.ignorar_status:
+if plano.get("status") != "aprovado" and not args.ignorar_status and not args.previa_emendas:
     sys.exit("O plano ainda não foi aprovado.")
+if not args.previa_emendas and not args.sem_validacao:
+    from validar_plano import hash_montagem
+    if plano.get("validacao", {}).get("hash") != hash_montagem(plano):
+        sys.exit("Plano não validado (ou mudou depois da validação). Rode: python Scripts/validar_plano.py " + args.plano)
 SRC = plano["video"]
 PASTA = args.pasta or os.path.join("Trabalho", "ep_" + os.path.splitext(os.path.basename(args.plano))[0])
 
@@ -67,13 +88,20 @@ pr = json.loads(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:
                                capture_output=True, text=True).stdout)["streams"][0]
 W, H = pr["width"], pr["height"]
 num, den = map(int, pr["r_frame_rate"].split("/"))
-FPS = round(num / den)            # Twitch "59.94/60" -> 60 (o render sai em CFR)
+FPS = num / den                   # FPS exato da fonte (V4): 59,94 continua 59,94 — nada de quadro duplicado
+FPS_STR = f"{num}/{den}"
+if args.previa_emendas:
+    W, H = 640, int(round(640 * H / W / 2)) * 2
 FONTE = "Scripts/fonts/Montserrat-Bold.otf"
 RED, ICE, BLACK = (220, 38, 38), (245, 245, 245), (17, 17, 17)
 XF_CORTE, XF_DISSOLVE = 0.20, 0.25
 
 VENC = ["-c:v", "h264_amf", "-quality", "quality", "-rc", "cqp",
-        "-qp_i", "18", "-qp_p", "20", "-qp_b", "22", "-g", str(FPS * 2), "-pix_fmt", "yuv420p"]
+        "-qp_i", "18", "-qp_p", "20", "-qp_b", "22", "-g", str(round(FPS * 2)), "-pix_fmt", "yuv420p"]
+if args.previa_emendas:
+    VENC = ["-c:v", "h264_amf", "-quality", "speed", "-rc", "cqp", "-qp_i", "26", "-qp_p", "28", "-qp_b", "30",
+            "-g", str(round(FPS * 2)), "-pix_fmt", "yuv420p"]
+HW = comum.hwaccel_args()
 AENC = ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
 
 
@@ -208,7 +236,7 @@ def zoom_filtro(zooms):
             expr = f"if(between(it,{a},{b}),{c},{expr})"
         return f"max(0,min({eixo}-{eixo}/zoom,({expr})*{eixo}-{eixo}/zoom/2))"
     return (f"zoompan=z='{zexpr}':x='{centro(partes_x, 'iw')}':y='{centro(partes_y, 'ih')}'"
-            f":d=1:s={W}x{H}:fps={FPS}")
+            f":d=1:s={W}x{H}:fps={FPS_STR}")
 
 
 def fundo(t0, dur, cache):
@@ -271,13 +299,15 @@ def montar(ep):
         longos = sum(1 for x in diag.values() if x["crossfade"] > XF_DISSOLVE)
         print(f"  emendas com crossfade longo (degrau de som de fundo): {longos} de {len(diag)}", flush=True)
 
-    # ---- gráficos
+    # ---- gráficos (não entram nas prévias de emenda)
     overlays = {}
+    segs_cards = [] if ep.get("_previa") else segs
     jogo = plano.get("jogo", "")
-    card_titulo(os.path.join(pasta, "cards", "titulo.png"), jogo, ep["titulo_card"] if "titulo_card" in ep
-                else ep["titulo"].split("|")[0].strip(), parte)
+    if segs_cards:
+        card_titulo(os.path.join(pasta, "cards", "titulo.png"), jogo, ep["titulo_card"] if "titulo_card" in ep
+                    else ep["titulo"].split("|")[0].strip(), parte)
     ncap = 0
-    for i, s in enumerate(segs):
+    for i, s in enumerate(segs_cards):
         if s["capitulo"] == "Abertura" or (i and segs[i - 1]["capitulo"] == s["capitulo"]):
             continue
         ncap += 1
@@ -288,7 +318,7 @@ def montar(ep):
             overlays[i].append((png, 4.5, 7.7))
         else:
             overlays.setdefault(i, []).append((png, 0.8, 4.0))
-    for i, s in enumerate(segs):
+    for i, s in enumerate(segs_cards):
         for k, tx in enumerate(s.get("textos", [])):
             png = os.path.join(pasta, "cards", f"txt_{i:03d}_{k}.png")
             card_texto(png, tx["texto"])
@@ -307,8 +337,8 @@ def montar(ep):
             out = out[:-4] + sufixo_censura(iv) + ".mp4"
         if os.path.exists(out):
             return out
-        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{a:.4f}", "-i", SRC]
-        g = [f"[0:v]fps={FPS},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS[v0]"]
+        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *HW, "-ss", f"{a:.4f}", "-i", SRC]
+        g = [f"[0:v]fps={FPS_STR},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS[v0]"]
         cur = "[v0]"
         if zooms:
             zz = [{**z, "inicio": z["inicio"] - rel0, "fim": z["fim"] - rel0} for z in zooms
@@ -323,7 +353,7 @@ def montar(ep):
             t0, t1 = t0 - rel0, min(t1 - rel0, d - 0.1)
             if t1 <= 0.2 or t0 >= d:
                 continue
-            cmd += ["-loop", "1", "-framerate", str(FPS), "-t", f"{d:.3f}", "-i", png]
+            cmd += ["-loop", "1", "-framerate", FPS_STR, "-t", f"{d:.3f}", "-i", png]
             idx = cmd.count("-i") - 1
             g.append(f"[{idx}:v]format=rgba,fade=t=in:st={max(t0, 0):.2f}:d=0.4:alpha=1,"
                      f"fade=t=out:st={t1 - 0.4:.2f}:d=0.4:alpha=1[o{k}]")
@@ -331,7 +361,7 @@ def montar(ep):
             cur = f"[w{k}]"
         g.append(f"{cur}format=yuv420p[vout]")
         run(cmd + ["-filter_complex", ";".join(g), "-map", "[vout]", "-an", "-frames:v", str(nq),
-                   *VENC, "-r", str(FPS), out])
+                   *VENC, "-r", FPS_STR, out])
         return out
 
     for i in range(n):
@@ -359,12 +389,12 @@ def montar(ep):
                 run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
                      "-ss", f"{B[i - 1] - ov[i]:.4f}", "-t", f"{ov[i] + 0.5:.3f}", "-i", SRC,
                      "-ss", f"{ini:.4f}", "-t", f"{ov[i] + 0.5:.3f}", "-i", SRC, "-filter_complex",
-                     ";".join([f"[0:v]fps={FPS},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS[a0]",
+                     ";".join([f"[0:v]fps={FPS_STR},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS[a0]",
                                *censura_filtro("[a0]", "[a1]", ia_, "da"), "[a1]format=yuv420p[a]",
-                               f"[1:v]fps={FPS},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS[b0]",
+                               f"[1:v]fps={FPS_STR},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS[b0]",
                                *censura_filtro("[b0]", "[b1]", ib_, "db"), "[b1]format=yuv420p[b]",
                                f"[a][b]xfade=transition=fade:duration={ov[i]:.4f}:offset=0[x]"]),
-                     "-map", "[x]", "-frames:v", str(nq), *VENC, "-r", str(FPS), outd])
+                     "-map", "[x]", "-frames:v", str(nq), *VENC, "-r", FPS_STR, outd])
             pedacos.append(outd)
         out = os.path.join(pasta, "v", f"{i:03d}_{round(c0 * FPS)}_{round(c1 * FPS)}.mp4")   # cache por tempo exato
         p = render_video(out, c0, c1 - c0, overlays.get(i, []), segs[i].get("zooms", []), c0 - ini)
@@ -377,7 +407,7 @@ def montar(ep):
     # dissolve de 0,5 s sobre o último quadro do episódio; o som do jogo some em 0,5 s.
     enc = plano.get("encerramento")
     dur_enc = 0.0
-    if enc and not args.so:
+    if enc and not args.so and not ep.get("_previa"):
         img = os.path.splitext(enc["arquivo"])[1].lower() in (".png", ".jpg", ".jpeg", ".webp")
         if img:
             dur_enc = q(float(enc.get("duracao", 10.0)))
@@ -393,22 +423,22 @@ def montar(ep):
             ult = B[-1]
             nq = int(round(dur_enc * FPS))
             if img:
-                entrada = ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur_enc + 1:.3f}", "-i", enc["arquivo"]]
+                entrada = ["-loop", "1", "-framerate", FPS_STR, "-t", f"{dur_enc + 1:.3f}", "-i", enc["arquivo"]]
                 card = (f"[1:v]scale={W * 2}:{H * 2}:flags=lanczos,setsar=1,"
                         f"zoompan=z='1+0.04*on/{nq}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:"
-                        f"s={W}x{H}:fps={FPS},format=yuv420p,setpts=PTS-STARTPTS[card]")
+                        f"s={W}x{H}:fps={FPS_STR},format=yuv420p,setpts=PTS-STARTPTS[card]")
             else:
                 entrada = ["-i", enc["arquivo"]]
-                card = (f"[1:v]fps={FPS},split[c1][c2];[c1]scale={W}:-2,crop={W}:{H},gblur=sigma=40,"
+                card = (f"[1:v]fps={FPS_STR},split[c1][c2];[c1]scale={W}:-2,crop={W}:{H},gblur=sigma=40,"
                         f"eq=brightness=-0.25[cb];[c2]scale=-2:{H}[cf];[cb][cf]overlay=(W-w)/2:0,setsar=1,"
                         f"format=yuv420p,setpts=PTS-STARTPTS[card]")
             run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{ult - 0.05:.3f}",
                  "-i", SRC, *entrada, "-filter_complex",
-                 f"[0:v]fps={FPS},scale={W}:{H},setsar=1,trim=end_frame=1,loop=loop=-1:size=1[lf0];"
+                 f"[0:v]fps={FPS_STR},scale={W}:{H},setsar=1,trim=end_frame=1,loop=loop=-1:size=1[lf0];"
                  + ";".join(censura_filtro("[lf0]", "[lf1]", iv_fim, "ec")) + ";[lf1]"
                  f"trim=duration=0.5,setpts=PTS-STARTPTS,format=yuv420p[last];{card};"
                  f"[last][card]xfade=transition=fade:duration=0.5:offset=0[x]",
-                 "-map", "[x]", "-frames:v", str(nq), *VENC, "-r", str(FPS), oute])
+                 "-map", "[x]", "-frames:v", str(nq), *VENC, "-r", FPS_STR, oute])
         pedacos.append(oute)
 
     # ---- onde cada emenda cai no episódio final (para o verificador)
@@ -418,11 +448,13 @@ def montar(ep):
             acum -= ov[i]
             if tipo[i] != "continuo":
                 juncoes.append({"trecho": i, "tipo": tipo[i], "t": round(acum + ov[i] / 2, 3), "crossfade": ov[i],
+                                "audio_desloc": float(segs[i].get("audio_desloc", 0) or 0),
                                 "origem_de": B[i - 1], "origem_para": A[i], "capitulo": segs[i]["capitulo"]})
         acum += B[i] - A[i]
     json.dump({"parte": parte, "duracao_prevista": round(acum + dur_enc, 3), "duracao_encerramento": dur_enc,
                "juncoes": juncoes,
-               "capitulos": ep.get("capitulos", [])},
+               "capitulos": ep.get("capitulos", []),
+               "facecam": None if ep.get("_previa") else plano.get("facecam")},
               open(os.path.join(pasta, "juncoes.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
     lst = os.path.join(pasta, "video.txt")
@@ -441,7 +473,13 @@ def montar(ep):
         if i and tipo[i] == "continuo":
             blocos[-1]["fim"] = B[i]
         else:
-            blocos.append({"ini": A[i], "fim": B[i], "ov": ov[i]})
+            d = float(segs[i].get("audio_desloc", 0) or 0) if i else 0.0
+            # J/L-cut: a fronteira do SOM anda d segundos em relação à da imagem; as duas faixas continuam
+            # sincronizadas (A soa até B_fim+d, B soa a partir de A_ini+d) e a duração total não muda
+            d = max(-1.0, min(d, 1.0))
+            if d and blocos:
+                blocos[-1]["fim"] += d
+            blocos.append({"ini": max(0.0, A[i] + d), "fim": B[i], "ov": ov[i]})
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
     for b in blocos:
         cmd += ["-ss", f"{b['ini']:.4f}", "-t", f"{b['fim'] - b['ini']:.4f}", "-i", SRC]
@@ -478,8 +516,28 @@ def montar(ep):
     print(f"Parte {parte} pronta: {saida} | vídeo {dv / 60:.2f} min | áudio {da / 60:.2f} min | dif {abs(dv - da):.3f}s")
 
 
+def previas(ep):
+    """uma prévia por emenda: 3 s antes + 3 s depois, mesma lógica de emenda do render final."""
+    M = ep["montagem"]
+    pasta = os.path.join(PASTA, f"parte_{ep['parte']:02d}", "previas")
+    feitas = []
+    for i in range(1, len(M)):
+        if abs(M[i]["origem_inicio"] - M[i - 1]["origem_fim"]) < 0.05:
+            continue
+        a_ = dict(M[i - 1], origem_inicio=max(M[i - 1]["origem_inicio"], M[i - 1]["origem_fim"] - 3.0), zooms=[], textos=[])
+        b_ = dict(M[i], origem_fim=min(M[i]["origem_fim"], M[i]["origem_inicio"] + 3.0), zooms=[], textos=[])
+        mini = {"parte": 900 + i, "titulo": "previa", "_previa": True, "montagem": [a_, b_],
+                "arquivo": os.path.join(pasta, f"emenda_{i:03d}_{b_.get('transicao', 'corte')}.mp4")}
+        montar(mini)
+        feitas.append(mini["arquivo"])
+    print(f"Prévias: {len(feitas)} em {pasta}")
+
+
 for ep in plano["episodios"]:
     if args.parte and ep["parte"] != args.parte:
+        continue
+    if args.previa_emendas:
+        previas(ep)
         continue
     if not args.parte and ep.get("status", plano.get("status")) != "aprovado" and not args.ignorar_status:
         print(f"Parte {ep['parte']} não aprovada, pulando.")

@@ -1,0 +1,88 @@
+{
+ "_sobre": "Configuração central (V4). Números de regras ficam aqui, não espalhados nos scripts. Mudanças em regras fundamentais só com pedido do João.",
+ "episodio": {
+  "min_minutos": 50,
+  "alvo_minutos": 55,
+  "max_minutos": 60,
+  "tolerancia_minutos": 62
+ },
+ "render": {
+  "encoder": "h264_amf",
+  "venc": [
+   "-quality",
+   "quality",
+   "-rc",
+   "cqp",
+   "-qp_i",
+   "18",
+   "-qp_p",
+   "20",
+   "-qp_b",
+   "22",
+   "-pix_fmt",
+   "yuv420p"
+  ],
+  "aenc": [
+   "-c:a",
+   "aac",
+   "-b:a",
+   "192k",
+   "-ar",
+   "48000",
+   "-ac",
+   "2"
+  ],
+  "loudnorm": "I=-14:TP=-1.5:LRA=11",
+  "hwaccel_decode": null,
+  "_hwaccel_decode": "preenchido pelo benchmark só se a GPU for comprovadamente mais rápida sem perda (ver Scripts/benchmarks/)",
+  "fps_exato_da_fonte": true,
+  "zoom_max": 1.15
+ },
+ "bordas": {
+  "pausa_normal": 0.7,
+  "pausa_fim_episodio": 1.5,
+  "avanco_max_normal": 12.0,
+  "avanco_max_fim": 40.0,
+  "margem_voz_db": 7.0
+ },
+ "transicoes": {
+  "jl_max": 0.8,
+  "crossfade_corte": 0.2,
+  "dissolve": 0.25,
+  "dissolves_seguidos_max": 1,
+  "dissolves_por_episodio_max": 6
+ },
+ "qc": {
+  "congelado_aviso_s": 0.25,
+  "congelado_problema_s": 1.0,
+  "silencio_aviso_s": 4.0,
+  "fala_cortada_db": 12,
+  "ruido_congelado_jogo": 0.002,
+  "ruido_congelado_cam": 0.0001,
+  "_ruido": "facecam: travamento real = quadros IDÊNTICOS (diferença 0). Pessoa parada numa webcam de 30 fps dentro de 60 fps já dá diferença ~0,0003 — por isso a tolerância da câmera é bem menor (medido em 2026-11-26)."
+ },
+ "analise": {
+  "amostras_por_s": 2,
+  "grade": [
+   96,
+   54
+  ],
+  "corte_cena": 0.32,
+  "letterbox_altura_max": 0.9
+ },
+ "facecam_conhecidas": {
+  "lives_twitch_ate_2026-11-22": [
+   1400,
+   126,
+   506,
+   284
+  ],
+  "live_2938905930_2026-11-24": [
+   26,
+   111,
+   454,
+   257
+  ],
+  "_aviso": "NÃO presumir: rodar analisar_live.py --facecam auto em toda live nova e conferir o painel."
+ }
+}

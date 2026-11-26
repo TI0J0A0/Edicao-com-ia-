@@ -1,0 +1,92 @@
+{
+ "data": "2026-11-26T01:57:03",
+ "video": "Final/Coletor de Marionetes_longo.mp4",
+ "fonte": "1920x1080 60/1",
+ "trecho_s": 60.0,
+ "decodificacao": {
+  "cpu": {
+   "ok": true,
+   "tempo_s": 5.8,
+   "cpu_s": 32.19,
+   "mem_max_mb": 181,
+   "erro": null
+  },
+  "d3d11va": {
+   "ok": true,
+   "tempo_s": 8.1,
+   "cpu_s": 7.48,
+   "mem_max_mb": 332,
+   "erro": null
+  },
+  "amf": {
+   "ok": true,
+   "tempo_s": 4.85,
+   "cpu_s": 2.2,
+   "mem_max_mb": 212,
+   "erro": null
+  }
+ },
+ "render": {
+  "cpu_decode": {
+   "ok": true,
+   "tempo_s": 17.41,
+   "cpu_s": 50.22,
+   "mem_max_mb": 251,
+   "erro": null
+  },
+  "gpu_decode_d3d11va": {
+   "ok": true,
+   "tempo_s": 16.81,
+   "cpu_s": 34.77,
+   "mem_max_mb": 384,
+   "erro": null
+  },
+  "gpu_decode_amf": {
+   "ok": false,
+   "tempo_s": 0.56,
+   "cpu_s": null,
+   "mem_max_mb": 187,
+   "erro": "e, because at least one of its streams received no packets.\nframe=    0 fps=0.0 q=0.0 Lsize=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.02    \nbench: maxrss=191628KiB\nConversion failed!"
+  },
+  "ssim_cpu_x_gpu_decode_d3d11va": 1.0,
+  "ssim_cpu_x_gpu_decode_amf": null,
+  "ssim_fonte_x_render": 0.992934
+ },
+ "analise": {
+  "hd": {
+   "tempo_s": 14.8,
+   "ok": true,
+   "x_tempo_real": 4.1,
+   "facecam": null
+  },
+  "proxy_160p": {
+   "tempo_s": 5.0,
+   "ok": true,
+   "x_tempo_real": 12.0,
+   "facecam": null
+  }
+ },
+ "tokens": {
+  "transcricao_txt_tokens": 1740,
+  "transcricao_json_tokens": 24751,
+  "resumo_ia_tokens": 480,
+  "reducao_x": 3.6
+ },
+ "conclusao": {
+  "ganho_decodificacao": {
+   "d3d11va": 0.72,
+   "amf": 1.2
+  },
+  "melhor_render": "d3d11va",
+  "ganho_render_x": 1.04,
+  "recomendacao": "manter decodificação na CPU (sem ganho real >10% com imagem idêntica)"
+ },
+ "render_paralelo": {
+  "sequencial_2x60s": 45.4,
+  "paralelo_2x60s": 30.3,
+  "paralelo_3x60s": 35.2,
+  "vazao_seq_s_por_min": 22.7,
+  "vazao_par2_s_por_min": 15.2,
+  "vazao_par3_s_por_min": 11.7
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "_sobre": "Perfis editoriais por tipo de jogo. Um plano pode combinar vários (\"perfil\": [\"mundo_aberto\", \"narrativo\"]); vale o valor mais protetor de cada parâmetro (comum.perfil).",
+ "padrao": "mundo_aberto",
+ "menor_e_mais_protetor": [],
+ "base": {
+  "tempo_morto_max_s": 20,
+  "menu_max_s": 10,
+  "preservar_cutscenes": true,
+  "preservar_silencio_tenso": false,
+  "condensar_tentativas_repetidas": true,
+  "repeticao_similaridade": 0.55,
+  "evitar_efeitos": false,
+  "dissolves_por_episodio_max": 6
+ },
+ "perfis": {
+  "narrativo": {"_": "história, diálogos, personagens; cutscenes inteiras; só condensa o repetitivo",
+   "tempo_morto_max_s": 30, "menu_max_s": 12, "preservar_cutscenes": true},
+  "mundo_aberto": {"_": "reduz deslocamento vazio; mantém descobertas, encontros, contexto geográfico",
+   "tempo_morto_max_s": 20, "menu_max_s": 10},
+  "soulslike_acao": {"_": "preserva dificuldade, erros relevantes, evolução de estratégia, vitória + reação; condensa tentativas iguais",
+   "tempo_morto_max_s": 15, "menu_max_s": 8, "condensar_tentativas_repetidas": true},
+  "terror": {"_": "preserva suspense, silêncio e preparação do susto; sem efeitos que quebrem a tensão",
+   "tempo_morto_max_s": 45, "menu_max_s": 10, "preservar_silencio_tenso": true, "evitar_efeitos": true},
+  "competitivo": {"_": "decisões, jogadas, erros, comunicação; condensa esperas e lobbies",
+   "tempo_morto_max_s": 12, "menu_max_s": 6}
+ }
+}
