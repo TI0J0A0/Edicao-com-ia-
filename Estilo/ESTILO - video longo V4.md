@@ -60,6 +60,12 @@ Valem as falas do João, de personagens, diálogos em outra língua, conversa en
 
 - Tirar o tempo morto sem destruir a ambientação. Os limites por perfil ficam em `perfis.json`: `tempo_morto_max_s`, `menu_max_s`.
 - Menus, mapa e inventário: curtos, salvo se houver conversa ou história ali.
+- **Ritmo V4.1 — PADRÃO desde 2026-11-26 (João aprovou depois do teste na Parte 1 da série 26/11; referência: séries longas de GTA 6 no YouTube, ex. Funky Black Cat):**
+  - **Sem silêncio de mapa, menu ou carregamento.** Todo trecho de som realmente mudo (a mix inteira abaixo de -50 dB por 3 s ou mais) sai automaticamente, com 0,4 s de respiro de cada lado (`Scripts/ritmo.py`).
+  - **Diálogo do jogo e cutscene nunca saem.** O corte só acontece no vão sem nenhuma palavra transcrita (do João ou do jogo) e sem voz detectada. Cutscene e o perfil `terror` ficam de fora. O jogo normal fica entre -30 e -40 dB; o mapa mudo fica entre -70 e -110 dB.
+  - **O episódio abre direto no jogo ou na fala.** Sem carregamento mudo nem tela preta no começo; um pedacinho solto em tela preta antes de um silêncio também sai.
+  - **Ritmo mais rápido:** os limites de tempo morto e de menu foram reduzidos em `perfis.json`. O validador avisa se sobrou silêncio cortável.
+  - **Continuam:** o cartão de título e o nome dos capítulos na tela, e a tela final de 10 s.
 - Repetições: fica só a melhor versão. O revisor compara as falas dos trechos mantidos.
 - Papo administrativo da live (PSN, qualidade da live, agenda, sub, thumb) sai, a não ser que seja engraçado.
 - Preservar a preparação e a consequência das piadas, a evolução das lutas e as reações inteiras. Não virar montagem de highlights.
@@ -122,7 +128,7 @@ PARA A COMPANHAR NOSSOS CONTEÚDOS AO VIVO SIGA NOSSAS LIVES.
 | 3 | Analisar (multimodal) | `python Scripts/analisar_live.py <proxy_160p> <cache> --facecam auto --fonte-wh <res. da fonte> --transcricao <T.json> --quadros Bruto/<fonte>` → `analise.json`, `resumo_ia.txt`, `facecam.jpg`, `quadros/` |
 | 4 | Memória editorial | `python Scripts/registrar_feedback.py resumo` (ler antes de decidir) |
 | 5 | Narrativa | `python Scripts/memoria_narrativa.py iniciar ...`; a IA preenche lendo o `resumo_ia.txt` (barato) e só depois abre a transcrição e os quadros nos trechos marcados; `... checar ...` |
-| 6 | Plano | gerador em `Scripts/planos/plano_<serie>_gerar.py` (modelo: `plano_gta_2938905930_gerar.py`, com bordas V4). Status `aguardando_aprovacao`; mostrar ao João |
+| 6 | Plano | gerador em `Scripts/planos/plano_<serie>_gerar.py` (modelo: `plano_gta_2940902491_gerar.py` — bordas V4, remendos, zoom contínuo e ritmo V4.1 via `ritmo.Ritmo`; `RITMO=0` desliga, `PLANO_TESTE=1` grava um plano de teste com vídeos em `Trabalho/teste_ritmo/`). Status `aguardando_aprovacao`; mostrar ao João |
 | 6b | Remendar travamentos (se houver cópia no YouTube) | `%USERPROFILE%/whisper-env/Scripts/python.exe Scripts/remendar_travamentos.py --plano ... --yt <url> --desloc-aprox <s> --travamentos <cache>/travamentos_fonte.json --saida <cache>/remendos`; depois gerar o plano de novo (lê `remendos.json`) |
 | 7 | Transições | `python Scripts/transicoes.py Trabalho/plano_x.json` |
 | 8 | Validar | `python Scripts/validar_plano.py Trabalho/plano_x.json` (precisa dar 0 erros; grava o hash) |

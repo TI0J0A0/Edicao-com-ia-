@@ -9,6 +9,8 @@ Uso: python Scripts/renderizar_serie.py --plano Trabalho/plano_x.json [--partes 
 """
 import argparse
 import concurrent.futures as cf
+import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -27,7 +29,12 @@ def parte(plano_p, pasta, ep, refazer):
     os.makedirs(pp, exist_ok=True)
     qc_p = os.path.join(pp, "qc.json")
     qc = comum.carregar_json(qc_p)
-    if not refazer and qc and os.path.exists(ep["arquivo"]) and not qc.get("problemas") \
+    # a parte só é pulada se a MONTAGEM é a mesma do último render (2026-11-26: o plano mudou — crossfades do
+    # ritmo — e a parte antiga foi pulada como "pronta")
+    h_p = os.path.join(pp, "montagem.sha1")
+    h = hashlib.sha1(json.dumps(ep["montagem"], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    mesmo = os.path.exists(h_p) and open(h_p, encoding="utf-8").read().strip() == h
+    if not refazer and mesmo and qc and os.path.exists(ep["arquivo"]) and not qc.get("problemas") \
             and os.path.getmtime(qc_p) >= os.path.getmtime(ep["arquivo"]):
         return n, "pulada (já pronta e aprovada no QC)", 0.0
     t = time.time()
@@ -37,6 +44,8 @@ def parte(plano_p, pasta, ep, refazer):
                            env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     if r.returncode != 0:
         return n, f"RENDER FALHOU (ver {pasta}/render_{n}.log)", time.time() - t
+    with open(h_p, "w", encoding="utf-8") as f:
+        f.write(h)
     with open(os.path.join(pp, "qc.log"), "w", encoding="utf-8") as log:
         # o episódio mantém a resolução da FONTE (bug 2026-11-26: o QC esperava 1920x1080 numa fonte 1440p)
         src = comum.sonda(comum.carregar_json(plano_p)["video"])

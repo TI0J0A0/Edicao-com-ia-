@@ -14,6 +14,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 os.chdir(RAIZ)
 sys.path.insert(0, os.path.join(RAIZ, "Scripts"))
 from bordas import Bordas  # noqa: E402
+import ritmo  # noqa: E402
 
 VOD = "2940902491"
 TR = f"Trabalho/GTA live {VOD}_transcricao.json"
@@ -27,6 +28,12 @@ STATUS = "aprovado"   # João: "Aprovado" em 2026-11-26
 d = json.load(open(TR, encoding="utf-8"))
 DUR = d["duracao"]
 B = Bordas(TR, AUDIO)
+PERFIL = ["mundo_aberto", "narrativo"]
+# Ritmo V4.1 (João 2026-11-26, referência Funky): corta silêncio real de mapa/menu/carregamento e abre o episódio
+# direto no jogo. RITMO=0 reproduz o plano entregue; PLANO_TESTE=1 grava num plano de teste (vídeos em Trabalho/).
+USAR_RITMO = os.environ.get("RITMO", "1") == "1"
+TESTE = os.environ.get("PLANO_TESTE") == "1"
+R = ritmo.Ritmo(AUDIO, TR, analise=f"{CACHE}/analise/analise.json", cache=CACHE, perfil=PERFIL) if USAR_RITMO else None
 
 
 def t(s):
@@ -187,6 +194,8 @@ for ep in EPISODIOS:
             segs.append({"capitulo": cap, "origem_inicio": round(x, 2), "origem_fim": round(y, 2), "decisao": dec,
                          "motivo": mot + (" (continua depois de um travamento da live)" if j else ""),
                          "transicao": "corte", "corte_travamento": sorted(set(mk)) or None})
+    if R:
+        segs = R.abertura(R.enxugar(R.abertura(segs)))
     # imagem com paradas por cima de fala (remendo cujo YouTube também para em pedaços, ou travamento sem remendo):
     # UM zoom contínuo e lento cobrindo o intervalo todo — a imagem nunca fica parada e nenhuma palavra some
     cobrir = [(r["ini"], r["fim"], 1.10) for r in REMENDOS if r.get("paradas")] + [(a_, b_, 1.06) for a_, b_ in COBRIR_ZOOM]
@@ -218,7 +227,7 @@ for ep in EPISODIOS:
         "parte": ep["parte"], "titulo": f"{ep['frase']} | Parte {ep['parte']}",
         "titulo_alternativo": f"{ep['alternativo']} | Parte {ep['parte']}", "titulo_card": ep["frase"],
         "titulo_youtube": tit_yt, "resumo": ep["resumo"], "status": STATUS, "thumb": [],
-        "arquivo": f"videos_longos/{JOGO}/{nome}.mp4",
+        "arquivo": f"Trabalho/teste_ritmo/{nome}.mp4" if TESTE else f"videos_longos/{JOGO}/{nome}.mp4",
         "origem_inicio": segs[0]["origem_inicio"], "origem_fim": segs[-1]["origem_fim"],
         "duracao_estimada": round(pos + 10.0, 1), "montagem": segs, "capitulos": caps,
     })
@@ -227,7 +236,7 @@ plano = {
     "video": f"Bruto/live_{VOD}_1440p60.mp4", "jogo": JOGO, "vod": f"https://www.twitch.tv/videos/{VOD}",
     "vod_youtube": "https://www.youtube.com/watch?v=_WKY4GFmZ7Q (mesma live; tempo Twitch = YouTube + 281,9 s)",
     "transcricao": TR, "audio": AUDIO, "analise": f"{CACHE}/analise/analise.json",
-    "narrativa": f"{CACHE}/narrativa.json", "travamentos_fonte": TRAV, "perfil": ["mundo_aberto", "narrativo"],
+    "narrativa": f"{CACHE}/narrativa.json", "travamentos_fonte": TRAV, "perfil": PERFIL,
     "estilo": "Estilo/ESTILO - video longo V4.md", "status": STATUS,
     "formato": "16:9 2560x1440 60 fps (igual à fonte original)",
     "encerramento": {"arquivo": "Estilo/encerramento_gta6.png", "duracao": 10.0},
@@ -242,6 +251,9 @@ plano = {
     ],
     "episodios": plano_eps, "duracao_original": DUR,
 }
-json.dump(plano, open(f"Trabalho/plano_gta_{VOD}.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+SAIDA = f"Trabalho/plano_gta_{VOD}{'_teste_ritmo' if TESTE else ''}.json"
+json.dump(plano, open(SAIDA, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+if R:
+    print(R.resumo())
 for e in plano_eps:
     print(f"Parte {e['parte']}: {e['duracao_estimada'] / 60:.1f} min | {len(e['montagem'])} trechos | {e['titulo_youtube']} ({len(e['titulo_youtube'])})")

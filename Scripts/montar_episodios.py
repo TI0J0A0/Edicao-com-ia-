@@ -478,7 +478,8 @@ def montar(ep):
             if tipo[i] != "continuo":
                 juncoes.append({"trecho": i, "tipo": tipo[i], "t": round(acum + ov[i] / 2, 3), "crossfade": ov[i],
                                 "audio_desloc": float(segs[i].get("audio_desloc", 0) or 0),
-                                "origem_de": B[i - 1], "origem_para": A[i], "capitulo": segs[i]["capitulo"]})
+                                "origem_de": B[i - 1], "origem_para": A[i], "capitulo": segs[i]["capitulo"],
+                                "crossfade_fixo": "dur_transicao" in segs[i]})
         acum += B[i] - A[i]
     json.dump({"parte": parte, "duracao_prevista": round(acum + dur_enc, 3), "duracao_encerramento": dur_enc,
                "juncoes": juncoes,

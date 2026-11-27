@@ -173,8 +173,60 @@ class TesteV4(unittest.TestCase):
 
     def test_perfis_combinam_pelo_mais_protetor(self):
         self.assertEqual(comum.perfil("competitivo")["tempo_morto_max_s"], 12)
+        self.assertEqual(comum.perfil("mundo_aberto")["tempo_morto_max_s"], 15)   # ritmo V4.1
         self.assertEqual(comum.perfil(["competitivo", "terror"])["tempo_morto_max_s"], 45)
         self.assertTrue(comum.perfil(["mundo_aberto", "terror"])["evitar_efeitos"])
+
+    # ---------------- ritmo V4.1 (João 2026-11-26: sem silêncio de mapa/menu, abre direto no jogo,
+    #                  nunca corta diálogo do jogo nem cutscene)
+    def _ritmo(self, sil, falas=(), cutscenes=(), pretos=(), perfil=None):
+        import ritmo
+        R = object.__new__(ritmo.Ritmo)
+        R.c, R.perf = ritmo._cfg(), comum.perfil(perfil)
+        R.sil, R.falas, R.cutscenes, R.pretos, R.voz, R.cortes = list(sil), list(falas), list(cutscenes), list(pretos), set(), []
+        return R
+
+    def test_ritmo_corta_silencio_de_mapa_com_respiro(self):
+        R = self._ritmo([(20.0, 30.0)])
+        segs = R.enxugar([{"capitulo": "c", "origem_inicio": 0.0, "origem_fim": 60.0, "transicao": "corte"}])
+        self.assertEqual([(s["origem_inicio"], s["origem_fim"]) for s in segs], [(0.0, 20.4), (29.6, 60.0)])
+        self.assertEqual(segs[1]["transicao"], "corte")
+        self.assertEqual(segs[1]["dur_transicao"], 0.3)   # crossfade curto: os dois lados já estão mudos
+
+    def test_ritmo_nao_corta_palavra_nem_cutscene(self):
+        # palavra baixinha no meio do silêncio: corta só o maior vão sem palavra
+        R = self._ritmo([(20.0, 32.0)], falas=[(24.0, 24.5)])
+        segs = R.enxugar([{"capitulo": "c", "origem_inicio": 0.0, "origem_fim": 60.0}])
+        cortado = [(a["origem_fim"], b["origem_inicio"]) for a, b in zip(segs, segs[1:])]
+        self.assertEqual(len(cortado), 1)
+        self.assertTrue(cortado[0][0] >= 24.5 + 0.15 + 0.4 - 1e-6, cortado)
+        # cutscene: nada sai
+        R = self._ritmo([(20.0, 30.0)], cutscenes=[(15.0, 40.0)])
+        self.assertEqual(len(R.enxugar([{"origem_inicio": 0.0, "origem_fim": 60.0}])), 1)
+        # terror preserva silêncio tenso
+        R = self._ritmo([(20.0, 30.0)], perfil="terror")
+        self.assertEqual(len(R.enxugar([{"origem_inicio": 0.0, "origem_fim": 60.0}])), 1)
+
+    def test_ritmo_abertura_sem_carregamento_mudo(self):
+        R = self._ritmo([(1.85, 14.4)], falas=[(0.0, 1.66), (14.56, 15.2)], pretos=[(0.0, 2.0)])
+        segs = [{"capitulo": "c", "origem_inicio": 0.0, "origem_fim": 33.0, "transicao": "corte"},
+                {"capitulo": "d", "origem_inicio": 40.0, "origem_fim": 60.0, "transicao": "corte"}]
+        segs = R.abertura(R.enxugar(R.abertura(segs)))
+        self.assertAlmostEqual(segs[0]["origem_inicio"], 14.0, delta=0.05)
+        self.assertEqual(segs[1]["origem_inicio"], 40.0)
+
+    def test_ritmo_detecta_silencio_real_no_audio(self):
+        import ritmo
+        wav = os.path.join(TMP, "ritmo_sil.wav")
+        r = run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                 "anoisesrc=color=pink:amplitude=0.05:d=4:r=48000", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=mono",
+                 "-f", "lavfi", "-i", "anoisesrc=color=pink:amplitude=0.05:d=4:r=48000", "-filter_complex",
+                 "[1]atrim=0:5[s];[0][s][2]concat=n=3:v=0:a=1[a]", "-map", "[a]", wav])
+        self.assertEqual(r.returncode, 0, r.stderr[-500:])
+        sil = ritmo.detectar_silencios(wav, -50, 3.0)
+        self.assertEqual(len(sil), 1)
+        self.assertAlmostEqual(sil[0][0], 4.0, delta=0.1)
+        self.assertAlmostEqual(sil[0][1], 9.0, delta=0.1)
 
     # ---------------- transições
     def test_transicoes_escolhe_L_cut_quando_a_fala_continua(self):

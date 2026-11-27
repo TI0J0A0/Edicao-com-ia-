@@ -188,6 +188,13 @@ def validar(plano, transcricao=None, audio=None, analise=None, narrativa=None):
                 if ov > perf["menu_max_s"]:
                     avisos.append(f"ritmo: {ov:.0f}s de menu/mapa/tela parada mantidos em {comum.hms(max(a_, x))} "
                                   f"(máx {perf['menu_max_s']}s, salvo se houver conversa/história)")
+    # ---- silêncio real (mapa/menu/carregamento mudo) que sobrou dentro dos trechos (ritmo V4.1, Scripts/ritmo.py)
+    if plano.get("audio") and os.path.exists(plano["audio"]) and "ritmo" in cfg:
+        import ritmo
+        cache = os.path.dirname(plano["audio"])
+        for parte, i, a_, b_ in ritmo.silencios_restantes(plano, cache=cache):
+            avisos.append(f"ritmo: Parte {parte} trecho {i} — {b_ - a_:.1f}s de silêncio de mapa/menu em "
+                          f"{comum.hms(a_)} sem fala nem diálogo: cortar com ritmo.Ritmo.enxugar()")
 
     # ---- duração e transições por episódio
     ep_cfg = cfg.get("episodio", {})

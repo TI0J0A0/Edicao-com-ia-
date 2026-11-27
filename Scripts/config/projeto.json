@@ -55,7 +55,7 @@
  "qc": {
   "congelado_aviso_s": 0.25,
   "congelado_problema_s": 1.0,
-  "silencio_aviso_s": 4.0,
+  "silencio_aviso_s": 3.0,
   "fala_cortada_db": 12,
   "ruido_congelado_jogo": 0.002,
   "ruido_congelado_cam": 0.0001,
@@ -84,5 +84,13 @@
    257
   ],
   "_aviso": "NÃO presumir: rodar analisar_live.py --facecam auto em toda live nova e conferir o painel."
+ },
+ "ritmo": {
+  "_sobre": "V4.1 (João 2026-11-26, referência Funky): corta silêncio REAL (mix inteira abaixo de silencio_db por >= silencio_min_s: mapa, menu, carregamento) dentro dos trechos, com respiro de cada lado. Nunca corta fala transcrita, voz detectada nem cutscene (Scripts/ritmo.py).",
+  "silencio_db": -50.0,
+  "silencio_min_s": 3.0,
+  "respiro_s": 0.4,
+  "peca_min_s": 2.0,
+  "protecao_fala_s": 0.15
  }
 }

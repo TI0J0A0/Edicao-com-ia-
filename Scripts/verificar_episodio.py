@@ -156,6 +156,8 @@ def piso(t0, t1):
 
 saltos = []
 for j in J["juncoes"]:
+    if j.get("crossfade_fixo") and min(piso(j["t"] - 1.0, j["t"]) or 0, piso(j["t"], j["t"] + 1.0) or 0) < -45:
+        continue    # emenda DENTRO de silêncio de mapa/menu (ritmo V4.1): a volta do som do jogo é natural, sem degrau
     antes, depois = piso(j["t"] - 3.2, j["t"] - 0.2), piso(j["t"] + 0.2, j["t"] + 3.2)
     if antes is None or depois is None:
         continue
@@ -183,7 +185,9 @@ def voz_no_corte(t, nome):
     if fundo is None:
         return
     ult = ser[-12:]                         # 0,6 s antes do corte
-    if ult and sum(1 for v in ult if v > fundo + 12) >= 6:
+    # fala cortada de verdade tem voz ATÉ o instante do corte; frase que terminou 0,4 s antes (respiro do corte de
+    # silêncio do ritmo V4.1) não conta — exige voz também nos últimos 0,25 s (2026-11-26)
+    if ult and sum(1 for v in ult if v > fundo + 12) >= 6 and sum(1 for v in ult[-5:] if v > fundo + 12) >= 3:
         falas_cortadas.append({"t": round(t, 2), "onde": nome, "acima_do_fundo_db": round(max(ult) - fundo, 1)})
         return f"possível FALA CORTADA {nome} ({t:.1f}s): voz {max(ult) - fundo:+.0f} dB acima do fundo até o corte"
 

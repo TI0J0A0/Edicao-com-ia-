@@ -36,3 +36,13 @@ Substitui `antigos/ESTILO_CORTES_TIOJOAO_CLAUDE.md`. Script: `C:\Python314\pytho
 - A ação precisa ser entendida nos 3 primeiros segundos; a história tem preparação → ação → reação.
 - Normalmente 18 a 50 s. Prioridade: jogada decisiva, boss, susto, falha engraçada, descoberta, reação a história.
 - Sempre mostrar o plano e esperar "Aprovado" antes de renderizar.
+
+## Estilo novo: reação dinâmica (referência Paulinho LOKO — João 2026-11-26, SÓ para vídeos curtos e Shorts)
+Opcional: usar quando o João pedir ou indicar no plano (`"estilo": "reacao_dinamica"`). **Nunca** na série longa.
+Medido num corte de 15 min do canal de referência: ~3,7 cortes por minuto, tomada típica de ~5 s e nenhuma pausa muda.
+- **Facecam que cresce na reação:** em reação forte (susto, risada, grito, surpresa), a câmera aumenta (~2x) por 1 a 3 s e depois volta. No Short, o mesmo vira um zoom de ~1,15 dentro da área da facecam.
+- **Zoom de ênfase:** zoom rápido (punch-in) no detalhe do jogo que causou a reação (carro raro, item, placa, mapa).
+- **Cortes secos frequentes:** sai toda pausa e toda espera; só fica preparação → ação → reação.
+- **Título chamativo:** CAIXA ALTA com o fato e um emoji no fim (ex.: "ACHEI UM CARRO SUPER RARO NO GTA 6 😱"), sem mentir sobre o conteúdo.
+- **Continuam iguais:** só o áudio original, sem música, e a mesma tela final.
+- **Situação:** documentado; os efeitos (facecam que cresce e zoom de ênfase) entram no `montar_cortes.py` no primeiro vídeo curto que usar este estilo, com teste antes.

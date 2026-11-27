@@ -204,6 +204,18 @@
    "regra_verificavel": "baixar_vod.py",
    "teste": "",
    "status": "ativo"
+  },
+  {
+   "id": "F018",
+   "data": "2026-11-26",
+   "tipo": "positivo",
+   "etiqueta": "ritmo_v41",
+   "jogo": "GTA 6",
+   "texto": "Ritmo V4.1 aprovado como padrão após teste na Parte 1 da série 26/11: cortar silêncio real de mapa/menu/carregamento (mix < -50 dB por >= 3 s, respiro 0,4 s, crossfade 0,3 s) e abrir o episódio direto no jogo/fala, sem nunca remover diálogo do jogo ou cutscene. Mantém cartão de título, capítulos na tela e tela final.",
+   "citacao": "Aprovado, vira padrão / na remocao do silencio lembre de nao remover dialogos importantes do game, como em cutscenes",
+   "regra_verificavel": "ritmo.py:Ritmo.enxugar; validar_plano.py:silencios_restantes",
+   "teste": "test_v4.py:test_ritmo_*",
+   "status": "ativo"
   }
  ]
 }
