@@ -112,10 +112,12 @@ def escolher(plano, audio=None, escrever=True):
             inicio_b = voz_acima(audio, s["origem_inicio"], jl)
             fim_a = voz_acima(audio, p["origem_fim"] - jl, jl)
             desloc = 0.0
-            if depois_a > 0.3 and inicio_b < 0.15:
+            # J/L só para fala que ATRAVESSA o ponto de corte (bug 2026-11-26: o J-cut puxava uma palavra de um
+            # trecho removido — "Maybe Coca-Cola" — porque havia voz antes da entrada, mas era outra frase)
+            if depois_a > 0.3 and fim_a > 0.3 and inicio_b < 0.15:
                 desloc = round(jl, 2)
                 motivos.append(f"L-cut {desloc}s: a fala de A continua depois do corte e B começa sem voz")
-            elif antes_b > 0.3 and fim_a < 0.15:
+            elif antes_b > 0.3 and inicio_b > 0.3 and fim_a < 0.15:
                 desloc = -round(min(jl, 0.6), 2)
                 motivos.append(f"J-cut {-desloc}s: a fala de B começa antes do ponto de entrada e A termina sem voz")
             elif depois_a > 0.3 and inicio_b >= 0.15:

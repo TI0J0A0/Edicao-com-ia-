@@ -44,6 +44,16 @@ def energia_voz(audio, t0, dur):
     return t0, out
 
 
+def fundo_robusto(ser):
+    """som de fundo do jogo: percentil 25 da energia de voz IGNORANDO silêncio digital (< -70 dB: menu de pausa,
+    loading). Bug achado em 2026-11-26: com um menu mudo nos 30 s anteriores o percentil 10 caía para -89 dB e
+    qualquer som do jogo virava "voz"."""
+    vivos = sorted(v for v in ser if v > -70)
+    if len(vivos) < max(20, len(ser) * 0.3):
+        vivos = sorted(ser)
+    return vivos[len(vivos) // 4] if len(vivos) > 20 else None
+
+
 class Bordas:
     def __init__(self, transcricao, audio=None, margem_db=7.0):
         d = json.load(open(transcricao, encoding="utf-8"))
@@ -59,7 +69,7 @@ class Bordas:
         k = round(x / 5)
         if k not in self._fundos:
             _, ser = energia_voz(self.audio, max(0.0, k * 5 - 30), 30)
-            self._fundos[k] = sorted(ser)[len(ser) // 10] if len(ser) > 40 else None
+            self._fundos[k] = fundo_robusto(ser)
         return self._fundos[k]
 
     # ---------- transcrição
@@ -130,15 +140,28 @@ class Bordas:
 
     # ---------- API
     def inicio(self, x, recuo_max=8.0):
-        """início de trecho: nunca no meio de frase; recua para a pausa antes da frase."""
+        """início de trecho: nunca no meio de frase nem de fala encadeada. Volta até o começo da sequência de
+        frases coladas (pausa < 0,4 s) — no máximo recuo_max — e confirma no áudio uma pausa antes."""
         x0 = x
-        f = self._frase_em(x)
-        if f:
-            x = max(f[0] - 0.35, (self._ant_fim(f[0]) + f[0]) / 2)
+        t = x
+        def anterior(tt):      # frase que começa antes de tt e termina mais tarde (frases coladas se sobrepõem)
+            prev = [(a, b) for a, b in self.frases if a < tt - 0.01]
+            return max(prev, key=lambda fb: fb[1]) if prev else None
+        for _ in range(60):
+            f = next(((a, b) for a, b in self.frases if a - 0.02 <= t < b + 0.05), None)
+            if f:
+                t = f[0]
+            p = anterior(t)
+            if not p or t - p[1] >= 0.4 or x0 - p[0] > recuo_max:
+                break
+            t = p[0]                               # fala colada antes: inclui a frase anterior
+        if t < x0 - 0.01 or self._frase_em(x0, folga=0.05):
+            p = anterior(t)
+            ant = p[1] if p else 0.0
+            x = max(t - 0.35, (ant + t) / 2) if ant < t else t - 0.05
         q = self._quieto(x, "ini", recuo_max, pausa=0.4)
-        if q is not None and x0 - q <= recuo_max:
-            f = self._frase_em(q)
-            x = max(f[0] - 0.35, (self._ant_fim(f[0]) + f[0]) / 2) if f else q
+        if q is not None and x0 - q <= recuo_max and not self._frase_em(q):
+            x = q            # (bug 2026-11-26: se q caísse dentro de outra frase longa, voltava 20 s; agora só aceita pausa)
         return round(max(0.0, x), 2)
 
     def fim(self, x, final=False):

@@ -32,6 +32,8 @@ DECISOES = {"PRESERVAR INTEGRALMENTE", "MANTER", "CONDENSAR", "ENCURTAR", "REMOV
 def hash_montagem(plano):
     m = [[(round(s["origem_inicio"], 2), round(s["origem_fim"], 2), s.get("transicao"), s.get("audio_desloc", 0))
           for s in ep["montagem"]] for ep in plano["episodios"]]
+    if plano.get("remendos_video"):      # remendos mudam a imagem: entram no hash (planos sem remendo: hash igual)
+        m.append([(r["ini"], r["fim"], r["desloc"]) for r in plano["remendos_video"]])
     return hashlib.sha1(json.dumps(m).encode()).hexdigest()[:16]
 
 
@@ -107,6 +109,15 @@ def validar(plano, transcricao=None, audio=None, analise=None, narrativa=None):
                     if not p and lado == "fim" and prox < (cfg.get("bordas", {}).get("pausa_fim_episodio", 1.5) * 0.8
                                                             if final else 0.4):
                         p = f"fala recomeça {prox:.2f}s depois do corte (conversa cortada)"
+                    conf = next((c for c in plano.get("bordas_conferidas", []) if abs(float(c["t"]) - x) <= 0.6), None)
+                    if p and conf:
+                        avisos.append(f"Parte {ep['parte']} trecho {i + 1} {lado} {comum.hms(x, True)}: {p} — CONFERIDA no "
+                                      f"quadro: {conf.get('nota', '')}")
+                        continue
+                    if p and lado in (s.get("corte_travamento") or []):
+                        avisos.append(f"Parte {ep['parte']} trecho {i + 1} {lado} {comum.hms(x, True)}: borda colada num "
+                                      f"TRAVAMENTO da live (corte obrigatório) — {p}; conferir ouvindo")
+                        continue
                     if p:
                         sug = B.inicio(x) if lado == "ini" else B.fim(x, final=final)
                         quem = "FIM DO EPISÓDIO" if final and lado == "fim" else f"trecho {i + 1} {lado}"
@@ -150,7 +161,18 @@ def validar(plano, transcricao=None, audio=None, analise=None, narrativa=None):
                     f"cutscene {comum.hms(a_)}–{comum.hms(b_)} removida sem motivo registrado")
             elif sobrepoe(a_, b_, mantidos) and not dentro(a_, b_, mantidos, 0.5):
                 avisos.append(f"cutscene {comum.hms(a_)}–{comum.hms(b_)} mantida só em parte — conferir diálogo")
-        for a_, b_ in ev.get("travamentos", []):
+        trav = ev.get("travamentos", [])
+        if plano.get("travamentos_fonte") and os.path.exists(plano["travamentos_fonte"]):
+            trav = comum.carregar_json(plano["travamentos_fonte"])     # medidos na FONTE (mais exatos que o proxy)
+        remendos = [(r["ini"] - 0.05, r["fim"] + 0.1) for r in plano.get("remendos_video", [])]
+        for ep_ in eps:                 # travada curta coberta por zoom (fala por cima): imagem não fica parada
+            for s_ in ep_["montagem"]:
+                for z in s_.get("zooms", []):
+                    if "parada" in z.get("motivo", ""):
+                        remendos.append((s_["origem_inicio"] + z["inicio"], s_["origem_inicio"] + z["fim"]))
+        for a_, b_ in trav:
+            if any(x <= a_ and b_ <= y for x, y in remendos):
+                continue        # imagem coberta pela outra gravação da live (remendar_travamentos.py), som da fonte
             if sobrepoe(a_, b_, mantidos):
                 (erros if b_ - a_ >= cfg.get("qc", {}).get("congelado_problema_s", 1.0) else avisos).append(
                     f"travamento da live {comum.hms(a_)} ({b_ - a_:.0f}s) dentro de trecho mantido — cortar ou cobrir")

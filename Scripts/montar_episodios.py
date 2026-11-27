@@ -134,6 +134,15 @@ def censura_filtro(entrada, saida, iv, tag):
     return g
 
 
+# remendos de imagem (Scripts/remendar_travamentos.py): segundos em que a FONTE travou a imagem mas o som seguiu;
+# a imagem vem da mesma live gravada em outra plataforma (tempo no clipe = tempo na fonte - desloc). Som: sempre da fonte.
+REMENDOS = sorted(plano.get("remendos_video", []), key=lambda r: r["ini"])
+
+
+def remendos_em(a, d):
+    return [r for r in REMENDOS if r["fim"] + 0.1 > a and r["ini"] - 0.05 < a + d]
+
+
 def sufixo_censura(iv):
     return "" if not iv else "_c" + "_".join(f"{round(x * 10)}-{round(y * 10)}" for x, y in iv)[:60]
 
@@ -220,10 +229,16 @@ def zoom_filtro(zooms):
     for z in zooms:
         a, b, e = z["inicio"], z["fim"], min(float(z.get("escala", 1.08)), 1.15)   # teto de qualidade
         r = min(0.6, (b - a) / 3)               # rampa de entrada/saída
-        # p(t) = 0..1..0 com cosseno nas rampas
-        p = (f"if(between(it,{a},{a + r}),(1-cos(PI*(it-{a})/{r}))/2,"
-             f"if(between(it,{a + r},{b - r}),1,"
-             f"if(between(it,{b - r},{b}),(1+cos(PI*(it-{b - r})/{r}))/2,0)))")
+        if z.get("continuo"):
+            # aproximação CONTÍNUA e lenta (0 -> 1 linear até b-r, depois volta com cosseno): a imagem nunca fica
+            # parada — usada para cobrir trechos com paradinhas da imagem enquanto a fala segue
+            p = (f"if(between(it,{a},{b - r}),(it-{a})/{b - r - a},"
+                 f"if(between(it,{b - r},{b}),(1+cos(PI*(it-{b - r})/{r}))/2,0))")
+        else:
+            # p(t) = 0..1..0 com cosseno nas rampas
+            p = (f"if(between(it,{a},{a + r}),(1-cos(PI*(it-{a})/{r}))/2,"
+                 f"if(between(it,{a + r},{b - r}),1,"
+                 f"if(between(it,{b - r},{b}),(1+cos(PI*(it-{b - r})/{r}))/2,0)))")
         partes_z.append(f"({e - 1})*{p}")
         cx, cy = float(z.get("cx", 0.5)), float(z.get("cy", 0.5))
         partes_x.append((cx, a, b))
@@ -335,11 +350,25 @@ def montar(ep):
         iv = censura_em(a, d)
         if iv:
             out = out[:-4] + sufixo_censura(iv) + ".mp4"
+        rm = remendos_em(a, d)
+        if rm:
+            out = out[:-4] + "_r" + "_".join(str(round(r["ini"] * 10)) for r in rm)[:50] + ".mp4"
+        if zooms:   # zoom faz parte da imagem: mudou o zoom, o pedaço tem de ser recodificado (2026-11-26)
+            import hashlib
+            out = out[:-4] + "_z" + hashlib.md5(json.dumps(zooms, sort_keys=True).encode()).hexdigest()[:6] + ".mp4"
         if os.path.exists(out):
             return out
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *HW, "-ss", f"{a:.4f}", "-i", SRC]
         g = [f"[0:v]fps={FPS_STR},scale={W}:{H},setsar=1,setpts=PTS-STARTPTS[v0]"]
         cur = "[v0]"
+        for k, r in enumerate(rm):
+            x0, x1 = max(r["ini"] - 0.05, a), min(r["fim"] + 0.1, a + d)
+            cmd += ["-ss", f"{x0 - r['desloc']:.4f}", "-t", f"{x1 - x0 + 0.5:.3f}", "-i", r["arquivo"]]
+            idx = cmd.count("-i") - 1
+            g.append(f"[{idx}:v]fps={FPS_STR},scale={W}:{H},setsar=1,format=yuv420p,"
+                     f"setpts=PTS-STARTPTS+{x0 - a:.4f}/TB[rm{k}]")
+            g.append(f"{cur}[rm{k}]overlay=0:0:eof_action=pass:enable='between(t,{x0 - a:.4f},{x1 - a:.4f})'[vr{k}]")
+            cur = f"[vr{k}]"
         if zooms:
             zz = [{**z, "inicio": z["inicio"] - rel0, "fim": z["fim"] - rel0} for z in zooms
                   if z["fim"] - rel0 > 0 and z["inicio"] - rel0 < d]

@@ -38,7 +38,10 @@ def parte(plano_p, pasta, ep, refazer):
     if r.returncode != 0:
         return n, f"RENDER FALHOU (ver {pasta}/render_{n}.log)", time.time() - t
     with open(os.path.join(pp, "qc.log"), "w", encoding="utf-8") as log:
-        q = subprocess.run([PY, os.path.join(S, "verificar_episodio.py"), ep["arquivo"], os.path.join(pp, "juncoes.json")],
+        # o episódio mantém a resolução da FONTE (bug 2026-11-26: o QC esperava 1920x1080 numa fonte 1440p)
+        src = comum.sonda(comum.carregar_json(plano_p)["video"])
+        q = subprocess.run([PY, os.path.join(S, "verificar_episodio.py"), ep["arquivo"], os.path.join(pp, "juncoes.json"),
+                            "--esperado-w", str(src["w"]), "--esperado-h", str(src["h"])],
                            stdout=log, stderr=subprocess.STDOUT, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     qc = comum.carregar_json(qc_p, {})
     st = "ok" if q.returncode == 0 else f"QC COM PROBLEMAS: {qc.get('problemas')}"

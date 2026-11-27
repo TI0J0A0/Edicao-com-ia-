@@ -192,6 +192,18 @@
    "regra_verificavel": "",
    "teste": "",
    "status": "ativo"
+  },
+  {
+   "id": "F017",
+   "data": "2026-11-26",
+   "tipo": "preferencia_jogo",
+   "etiqueta": "qualidade_original",
+   "jogo": "*",
+   "texto": "Sempre a qualidade ORIGINAL da live (a de 26/11 foi 1440p60). A Twitch pode esconder o Source da lista (só 720p60 apareceu); o original fica em chunked/ — usar Scripts/baixar_vod.py, que testa isso e mostra a escolha",
+   "citacao": "Pare, a live deve ter 1080 / A live está a 1440p 60",
+   "regra_verificavel": "baixar_vod.py",
+   "teste": "",
+   "status": "ativo"
   }
  ]
 }

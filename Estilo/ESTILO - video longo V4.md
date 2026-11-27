@@ -100,24 +100,30 @@ PARA A COMPANHAR NOSSOS CONTEÚDOS AO VIVO SIGA NOSSAS LIVES.
 
 ## 8. Imagem, áudio e casos especiais
 
-- **Imagem:** resolução e **FPS exatos da fonte** (o render usa o FPS racional; 59,94 continua 59,94). Uma única codificação (h264_amf CQP 18/20/22). Nunca renderizar a partir do proxy. Sem sharpening nem interpolação.
+- **Imagem:** resolução (1080p ou 1440p, a que a live tiver) e **FPS exatos da fonte** (o render usa o FPS racional; 59,94 continua 59,94). Uma única codificação (h264_amf CQP 18/20/22). Nunca renderizar a partir do proxy. Sem sharpening nem interpolação.
 - **Facecam:** **não presumir a posição.** Já houve `[1400,126,506,284]` e `[26,111,454,257]`. Rodar `analisar_live.py --facecam auto` e conferir o `facecam.jpg`.
 - **Áudio:** voz, diálogo e música do jogo em primeiro plano. Crossfade em toda emenda. Normalizar a -14 LUFS. Nunca piorar o áudio para "dinamizar".
 - **Mudo da Twitch** (blocos de 180 s sem som): detectar com `silencedetect` antes do plano e pular com dissolve.
 - **Blur de nudez:** só nudez de fato (seios à mostra, genitais, personagem pelado, como no lap dance com o sutiã tirado). Biquíni, lingerie e "quase nu" **não** levam blur. Marcar em `"censura"` no tempo da fonte. A facecam continua nítida.
 - **Outra pessoa jogando** (irmão menor): o trecho sai inteiro e vira elipse.
+- **Travamento da live** (imagem parada, jogo E facecam juntos; na Twitch costuma ter múltiplos de 2 s com o som seguindo normal):
+  - **nunca micro-cortar em cima de fala;**
+  - se a mesma live existe no YouTube, rodar `remendar_travamentos.py` (com o Python do whisper-env): o trecho fica contínuo, com o som da fonte, e só a imagem desses segundos vem do YouTube. Cada remendo é conferido quadro a quadro antes e depois, e o quanto a imagem do YouTube para é medido;
+  - onde ainda sobra imagem parada com fala por cima (o YouTube também para em pedaços, ou não deu para remendar), entra um zoom contínuo e lento (`"continuo": true`) sobre o intervalo todo;
+  - micro-corte só em travamento sem fala.
 
 ## 9. Pipeline V4 (rodar da raiz do projeto)
 
 | # | Etapa | Comando |
 |---|---|---|
 | 0 | Ambiente e link | `python Scripts/checar_ambiente.py` e `python Scripts/checar_link.py <link>` |
-| 1 | Baixar (fonte 1080p60 + áudio + proxy 160p) | `yt-dlp` do `whisper-env` → `Bruto/` e `Trabalho/longo_<jogo>_<vod>/` |
+| 1 | Baixar (fonte ORIGINAL + áudio + proxy 160p) | `python Scripts/baixar_vod.py <link>` (acha o Source mesmo quando a Twitch o esconde da lista, pela pasta `chunked/`; a live de 26/11 era 2560x1440 60 fps) |
 | 2 | Transcrever | `python Scripts/transcrever_longo.py <audio> <cache> Trabalho --nome ...` (blocos com checkpoint) |
-| 3 | Analisar (multimodal) | `python Scripts/analisar_live.py <proxy_160p> <cache> --facecam auto --fonte-wh 1920x1080 --transcricao <T.json> --quadros Bruto/<fonte>` → `analise.json`, `resumo_ia.txt`, `facecam.jpg`, `quadros/` |
+| 3 | Analisar (multimodal) | `python Scripts/analisar_live.py <proxy_160p> <cache> --facecam auto --fonte-wh <res. da fonte> --transcricao <T.json> --quadros Bruto/<fonte>` → `analise.json`, `resumo_ia.txt`, `facecam.jpg`, `quadros/` |
 | 4 | Memória editorial | `python Scripts/registrar_feedback.py resumo` (ler antes de decidir) |
 | 5 | Narrativa | `python Scripts/memoria_narrativa.py iniciar ...`; a IA preenche lendo o `resumo_ia.txt` (barato) e só depois abre a transcrição e os quadros nos trechos marcados; `... checar ...` |
 | 6 | Plano | gerador em `Scripts/planos/plano_<serie>_gerar.py` (modelo: `plano_gta_2938905930_gerar.py`, com bordas V4). Status `aguardando_aprovacao`; mostrar ao João |
+| 6b | Remendar travamentos (se houver cópia no YouTube) | `%USERPROFILE%/whisper-env/Scripts/python.exe Scripts/remendar_travamentos.py --plano ... --yt <url> --desloc-aprox <s> --travamentos <cache>/travamentos_fonte.json --saida <cache>/remendos`; depois gerar o plano de novo (lê `remendos.json`) |
 | 7 | Transições | `python Scripts/transicoes.py Trabalho/plano_x.json` |
 | 8 | Validar | `python Scripts/validar_plano.py Trabalho/plano_x.json` (precisa dar 0 erros; grava o hash) |
 | 9 | Prévias (opcional) | `python Scripts/montar_episodios.py --plano ... --previa-emendas` |

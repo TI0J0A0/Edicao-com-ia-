@@ -178,7 +178,10 @@ def voz_no_corte(t, nome):
     t0, ser = energia_voz(a.video, t - 30, min(30, t))   # termina exatamente no corte
     if len(ser) < 60:
         return
-    fundo = sorted(ser)[len(ser) // 10]     # fundo do jogo (30 s, percentil 10)
+    from bordas import fundo_robusto
+    fundo = fundo_robusto(ser)              # fundo do jogo (30 s, ignorando silêncio digital de menus)
+    if fundo is None:
+        return
     ult = ser[-12:]                         # 0,6 s antes do corte
     if ult and sum(1 for v in ult if v > fundo + 12) >= 6:
         falas_cortadas.append({"t": round(t, 2), "onde": nome, "acima_do_fundo_db": round(max(ult) - fundo, 1)})

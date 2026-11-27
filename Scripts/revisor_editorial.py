@@ -117,8 +117,13 @@ class Revisor:
                              "estender 3–5 s para incluir a reação (ou começar a próxima parte por ela)")
             prox_fala = next((a_ for a_, _, _ in frases if a_ > fim), None)
             if prox_fala is not None and prox_fala - fim < 1.2:
-                self.add("PROBLEMA", ep["parte"], fim, f"fala recomeça {prox_fala - fim:.1f}s após o fim do episódio",
-                         "Bordas.fim(final=True) — fechar a conversa")
+                conf = next((c for c in p.get("bordas_conferidas", []) if abs(float(c["t"]) - fim) <= 0.6), None)
+                if conf:
+                    self.add("AVISO", ep["parte"], fim, f"fala recomeça {prox_fala - fim:.1f}s após o fim — CONFERIDA: "
+                             f"{conf.get('nota', '')}", "nada (borda conferida no plano)")
+                else:
+                    self.add("PROBLEMA", ep["parte"], fim, f"fala recomeça {prox_fala - fim:.1f}s após o fim do episódio",
+                             "Bordas.fim(final=True) — fechar a conversa")
             # começo fraco
             ini = M[0]["origem_inicio"]
             if ps:
